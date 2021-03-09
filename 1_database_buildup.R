@@ -22,6 +22,11 @@ juros <- juros_db %>%
 
 rm(code, juros_db)
 
+# Exchange rate ----
+
+code <- c(cambio = 3698) # Taxa de câmbio - Livre - Dólar americano (venda) - Média de período - mensal 
+usd <- rbcb::get_series(code, "2000-02-01") # Exchange rate data from BCB SGS
+
 # IPCA ----
 ipca <- '/t/1737/n1/all/v/2266/p/all/d/v2266%2013' %>%
   get_sidra(api = .) %>%
