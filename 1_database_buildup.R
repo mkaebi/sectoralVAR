@@ -32,6 +32,12 @@ usd <- rbcb::get_series(code, "2000-02-01") # Exchange rate data from BCB SGS
 code <- c(credito = 21277) # Concessões de crédito com recursos livres - Série encadeada ao crédito referencial - Total
 credito <- rbcb::get_series(code, "2000-02-01") # Nonearmarked new operations - Series chained to reference credit - Total data from BCB SGS
 
+# Money supply ----
+
+code <- c(credito = 27841) # Meios de pagamento - M1 (saldo em final de período) - Novo - sazonalmente ajustado
+credito <- rbcb::get_series(code, "2000-02-01") # Money supply - M1 (end-of-period balance) - New - seasonally adjusted data from BCB SGS
+
+
 # IPCA ----
 ipca <- '/t/1737/n1/all/v/2266/p/all/d/v2266%2013' %>%
   get_sidra(api = .) %>%
