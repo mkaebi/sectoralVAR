@@ -3,12 +3,13 @@ library(lubridate)
 library(zoo)
 library(sidrar)
 library(rbcb)
+library(seasonal)
 
-# Code for gathering data
+# Code for gathering data and merging into a database
 
-# Selic ----
+# 1) Selic ----
 code <- c(selic_daily = 1178)
-juros_db <- rbcb::get_series(code, "2000-02-01") # Selic data from BCB SGS
+juros_db <- rbcb::get_series(code, "2000-01-01") # Selic data from BCB SGS
 
 ## Monthly average from daily data
 juros <- juros_db %>%
@@ -22,23 +23,27 @@ juros <- juros_db %>%
 
 rm(code, juros_db)
 
-# Exchange rate ----
+# 2) Exchange rate ----
 
 code <- c(cambio = 3698) # Taxa de câmbio - Livre - Dólar americano (venda) - Média de período - mensal 
 usd <- rbcb::get_series(code, "2000-02-01") # Exchange rate data from BCB SGS
 
-# Credit ----
+# 3) Credit ----
 
 code <- c(credito = 21277) # Concessões de crédito com recursos livres - Série encadeada ao crédito referencial - Total
 credito <- rbcb::get_series(code, "2000-02-01") # Nonearmarked new operations - Series chained to reference credit - Total data from BCB SGS
+credito <- credito %>% 
+  dplyr::mutate(credito_sa = final(seas(ts(credito, start = c(2000, 6), frequency = 12)))) %>% 
+  select(date, credito_sa)
 
-# Money supply ----
+# 4) Money supply ----
 
-code <- c(credito = 27841) # Meios de pagamento - M1 (saldo em final de período) - Novo - sazonalmente ajustado
-credito <- rbcb::get_series(code, "2000-02-01") # Money supply - M1 (end-of-period balance) - New - seasonally adjusted data from BCB SGS
+code <- c(money_supply = 27841) # Meios de pagamento - M1 (saldo em final de período) - Novo - sazonalmente ajustado
+money <- rbcb::get_series(code, "2000-02-01") # Money supply - M1 (end-of-period balance) - New - seasonally adjusted data from BCB SGS
 
+rm(code)
 
-# IPCA ----
+# 5) IPCA ----
 ipca <- '/t/1737/n1/all/v/2266/p/all/d/v2266%2013' %>%
   get_sidra(api = .) %>%
   dplyr::mutate(date = parse_date(`Mês (Código)`, format = '%Y%m')) %>%
@@ -46,9 +51,10 @@ ipca <- '/t/1737/n1/all/v/2266/p/all/d/v2266%2013' %>%
   dplyr::mutate(
     IPCA_A = (value / dplyr::lag(value, 12) - 1) * 100 # YoY Inflation in %
   ) %>%  
-  dplyr::filter(date >= as.Date("2002-01-01"))
+  dplyr::filter(date >= as.Date("2000-01-01")) %>% 
+  select(date, IPCA_A)
 
-# Produção industrial (PIM-PF)----
+# 6) Produção industrial (PIM-PF)----
 
 # Índice base fixa com ajuste sazonal (Base: média 2012 = 100)
 
@@ -83,7 +89,7 @@ PIM <- left_join(pim_2, pim_1, by = "date") %>%
 rm(pim_1, pim_2)
 
 
-# Atividade do comércio (PMC)----
+# 7) Atividade do comércio (PMC)----
 
 # Índice base fixa com ajuste sazonal (Base: média 2014 = 100)
 
@@ -109,3 +115,62 @@ pmc_2 <-
 ## Joining previous pmc tables
 PMC <- left_join(pmc_1, pmc_2, by = "date")
 rm(pmc_1, pmc_2)
+
+
+# 8) Atividade dos serviços (PMS)----
+
+# Índice do volume de serviços (2014 = 100) - dessaz.
+
+## Índice do volume de serviços
+pms_1 <-
+  '/t/6442/n1/all/v/8677/p/all/c11046/40312/d/v8677%201' %>%
+  get_sidra(api = .) %>%
+  dplyr::mutate(date = parse_date(`Mês (Código)`, format = '%Y%m')) %>%
+  select(date, "Variável", Valor) %>%
+  pivot_wider(names_from = "Variável",
+              values_from = Valor)
+
+
+## Índice do volume de serviços por tipo de serviço
+pms_2 <-
+  '/t/6443/n1/all/v/8676/p/all/c11046/40312/c12355/31399,106869,106874,106876/d/v8676%201' %>%
+  get_sidra(api = .) %>%
+  dplyr::mutate(date = parse_date(`Mês (Código)`, format = '%Y%m')) %>%
+  select(date, "Atividades de serviços", Valor) %>%
+  pivot_wider(names_from = "Atividades de serviços",
+              values_from = Valor)
+
+## Joining previous pms tables
+PMS <- left_join(pms_1, pms_2, by = "date")%>% 
+  rename("Serviços profissionais, administrativos e complementares" = "3. Serviços profissionais, administrativos e complementares",
+         "Serviços prestados às famílias" = "1. Serviços prestados às famílias",
+         "Serviços de informação e comunicação" = "2. Serviços de informação e comunicação",
+         "Transportes, serviços auxiliares aos transportes e correio" = "4. Transportes, serviços auxiliares aos transportes e correio")
+rm(pms_1, pms_2)
+
+
+# Database 1 - Industrial sector ----
+
+db_industry <- left_join(PIM, juros, by = 'date') %>%
+  left_join(ipca, by = 'date') %>%
+  left_join(usd, by = 'date') %>%
+  left_join(credito, by = 'date') %>%
+  left_join(money, by = 'date')
+
+
+# Database 2 - Retail sector ----
+
+db_retail <- left_join(PMC, juros, by = 'date') %>%
+  left_join(ipca, by = 'date') %>%
+  left_join(usd, by = 'date') %>%
+  left_join(credito, by = 'date') %>%
+  left_join(money, by = 'date') %>% 
+  drop_na()
+
+# Database 3 - Services sector ----
+
+db_services <- left_join(PMS, juros, by = 'date') %>%
+  left_join(ipca, by = 'date') %>%
+  left_join(usd, by = 'date') %>%
+  left_join(credito, by = 'date') %>%
+  left_join(money, by = 'date')
