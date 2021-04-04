@@ -1,3 +1,4 @@
+rm(list = ls())
 library(tidyverse)
 library(lubridate)
 library(zoo)
@@ -36,6 +37,8 @@ credito <- credito %>%
   dplyr::mutate(credito_sa = final(seas(ts(credito, start = c(2000, 6), frequency = 12)))) %>% 
   select(date, credito_sa)
 
+credito$credito_sa <- as.numeric(credito$credito_sa)
+
 # 4) Money supply ----
 
 code <- c(money_supply = 27841) # Meios de pagamento - M1 (saldo em final de período) - Novo - sazonalmente ajustado
@@ -69,7 +72,7 @@ pim_1 <-
 
 ## Indústria geral, extrativa e transformação
 pim_2 <-
-  '/t/3653/n1/all/v/3135/p/all/c544/129314,129315,129316/d/v3135%201' %>%
+  '/t/3653/n1/all/v/3134/p/all/c544/129314,129315,129316/d/v3134%201' %>%
   get_sidra(api = .) %>%
   dplyr::mutate(date = parse_date(`Mês (Código)`, format = '%Y%m')) %>%
   select(date, "Seções e atividades industriais (CNAE 2.0)", Valor) %>%
@@ -84,7 +87,7 @@ PIM <- left_join(pim_2, pim_1, by = "date") %>%
          "Bens de capital" = "1 Bens de capital",
          "Bens intermediários" = "2 Bens intermediários",
          "Bens de consumo duráveis" = "31 Bens de consumo duráveis",
-         "Bens de consumo semiduráveis e não duráveis" = "32 Bens de consumo semiduráveis e não duráveis")
+         "Bens de consumo não duráveis" = "32 Bens de consumo semiduráveis e não duráveis")
 
 rm(pim_1, pim_2)
 
@@ -157,6 +160,7 @@ db_industry <- left_join(PIM, juros, by = 'date') %>%
   left_join(credito, by = 'date') %>%
   left_join(money, by = 'date')
 
+save(db_industry, file = 'db_industry.RData')
 
 # Database 2 - Retail sector ----
 
@@ -167,6 +171,8 @@ db_retail <- left_join(PMC, juros, by = 'date') %>%
   left_join(money, by = 'date') %>% 
   drop_na()
 
+save(db_retail, file = 'db_retail.RData')
+
 # Database 3 - Services sector ----
 
 db_services <- left_join(PMS, juros, by = 'date') %>%
@@ -174,3 +180,15 @@ db_services <- left_join(PMS, juros, by = 'date') %>%
   left_join(usd, by = 'date') %>%
   left_join(credito, by = 'date') %>%
   left_join(money, by = 'date')
+
+save(db_services, file = 'db_services.RData')
+
+# Database 4 - Full Non sectoral data (for all sample plots) ----
+
+non_sectoral <- full_join(juros, ipca, by = 'date') %>%
+  full_join(usd, by = 'date') %>%
+  full_join(credito, by = 'date') %>%
+  full_join(money, by = 'date') %>%
+  arrange(date)
+
+save(non_sectoral, file = 'non_sectoral_data.RData')
