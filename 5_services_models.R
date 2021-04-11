@@ -14,7 +14,7 @@ windowsFonts(LM2 = windowsFont("lmroman10-regular"))
 
 theme_set(theme_classic())
 theme_update(panel.grid.major.y = element_line(linetype = "dotted", color = "gray70"),
-             axis.title = element_text(size = 10, color = "black"),
+             axis.title = element_text(size = 9, color = "black"),
              axis.text = element_text(size = 8, color = "black"),
              plot.title = element_text(family = 'LM', size = 12, color = 'black'),
              plot.caption = element_text(family = 'LM2', size = 13, color = 'black'),
@@ -22,6 +22,45 @@ theme_update(panel.grid.major.y = element_line(linetype = "dotted", color = "gra
 
 # loading Database ----
 load("C:/Users/Mohammed/Desktop/TCC I/R project/TCC/db_services.RData")
+
+# ADF tests ----
+
+db_services_adf <- db_services %>%
+  dplyr::mutate(
+    log_IPCA_A = log(IPCA_A),
+    log_money_supply = log(money_supply),
+    log_credito_sa = log(credito_sa),
+    log_cambio = log(cambio)
+  ) %>% # inflation, money supply, credit and FX rate in logs
+  dplyr::select(-date, -IPCA_A, -cambio, -credito_sa, -money_supply) # table to use in ADF tests function
+
+adf_tests_matrix <- function(vars) {
+  
+  ##
+  # Function to perform ADF tests on all columns of a table
+  ##
+  
+  d <- as.matrix(vars) # convert data frame to Matrix
+  n <- length(colnames(vars)) #total number of variables
+  names <- colnames(vars) # names of variables
+  result <-
+    matrix(NA, nrow = n, ncol = 3) # empty matrix for results
+  colnames(result) <- c('Variable', 'ADF on level', 'ADF on Diff')
+  
+  for (i in 1:n) {
+    pvalue_level <- tseries::adf.test(d[, i])$p.value # pvalue of ADF test on level
+    pvalue_diff <- tseries::adf.test(diff(d[, i]))$p.value # pvalue of ADF test on first diff
+    
+    result[i, 1] <- names[i]
+    result[i, 2] <- round(as.numeric(pvalue_level), 3)
+    result[i, 3] <- round(as.numeric(pvalue_diff), 3)
+  }
+  
+  return(result)
+}
+
+adf_tests_matrix(db_services_adf)
+stargazer(adf_tests_matrix(db_services_adf))
 
 # 1) Índice de volume de serviços ----
 ## Data ----
@@ -93,7 +132,7 @@ g1 <- tibble(
               fill = "#6812B3") +
   geom_hline(aes(yintercept = 0), color = "black") +
   labs(title = 'Produto de serviços - Geral',
-       x = '',
+       x = 'Meses após o choque',
        y = '')
 
 # ________________________________________----
@@ -171,7 +210,7 @@ g2 <- tibble(
               fill = "#6812B3") +
   geom_hline(aes(yintercept = 0), color = "black") +
   labs(title = 'Profissionais e administrativos',
-       x = '',
+       x = 'Meses após o choque',
        y = '')
 
 # ________________________________________----
@@ -248,7 +287,7 @@ g3 <- tibble(
               fill = "#6812B3") +
   geom_hline(aes(yintercept = 0), color = "black") +
   labs(title = 'Prestados às famílias',
-       x = '',
+       x = 'Meses após o choque',
        y = '')
 
 # ________________________________________----
@@ -325,7 +364,7 @@ g4 <- tibble(
               fill = "#6812B3") +
   geom_hline(aes(yintercept = 0), color = "black") +
   labs(title = 'Informação e comunicação',
-       x = '',
+       x = 'Meses após o choque',
        y = '')
 
 # ________________________________________----
@@ -402,7 +441,7 @@ g5 <- tibble(
               fill = "#6812B3") +
   geom_hline(aes(yintercept = 0), color = "black") +
   labs(title = 'Transportes',
-       x = '',
+       x = 'Meses após o choque',
        y = '')
 
 # ________________________________________----

@@ -6,6 +6,9 @@ library(vars)
 library(tseries)
 library(VARtests)
 library(extrafont)
+library(stargazer)
+library(egcm)
+library(aTSA)
 
 # Theme ----
 loadfonts(device = "win")
@@ -14,7 +17,7 @@ windowsFonts(LM2 = windowsFont("lmroman10-regular"))
 
 theme_set(theme_classic())
 theme_update(panel.grid.major.y = element_line(linetype = "dotted", color = "gray70"),
-             axis.title = element_text(size = 10, color = "black"),
+             axis.title = element_text(size = 9, color = "black"),
              axis.text = element_text(size = 8, color = "black"),
              plot.title = element_text(family = 'LM', size = 12, color = 'black'),
              plot.caption = element_text(family = 'LM2', size = 13, color = 'black'),
@@ -22,6 +25,77 @@ theme_update(panel.grid.major.y = element_line(linetype = "dotted", color = "gra
 
 # loading Database ----
 load("C:/Users/Mohammed/Desktop/TCC I/R project/TCC/db_industry.RData")
+
+# ADF tests ----
+
+db_industry_adf <- db_industry %>%
+  dplyr::mutate(
+    log_IPCA_A = log(IPCA_A),
+    log_money_supply = log(money_supply),
+    log_credito_sa = log(credito_sa),
+    log_cambio = log(cambio)
+  ) %>% # inflation, money supply, credit and FX rate in logs
+  dplyr::select(-date, -IPCA_A, -cambio, -credito_sa, -money_supply) # table to use in ADF tests function
+
+adf_tests_matrix <- function(vars) {
+  
+  ##
+  # Function to perform ADF tests on all columns of a table
+  ##
+  
+  d <- as.matrix(vars) # convert data frame to Matrix
+  n <- length(colnames(vars)) #total number of variables
+  names <- colnames(vars) # names of variables
+  result <-
+    matrix(NA, nrow = n, ncol = 3) # empty matrix for results
+  colnames(result) <- c('Variable', 'ADF on level', 'ADF on Diff')
+  
+  for (i in 1:n) {
+    pvalue_level <- tseries::adf.test(d[, i])$p.value # pvalue of ADF test on level
+    pvalue_diff <- tseries::adf.test(diff(d[, i]))$p.value # pvalue of ADF test on first diff
+    
+    result[i, 1] <- names[i]
+    result[i, 2] <- round(as.numeric(pvalue_level), 3)
+    result[i, 3] <- round(as.numeric(pvalue_diff), 3)
+  }
+  
+  return(result)
+}
+
+adf_tests_matrix(db_industry_adf)
+stargazer(adf_tests_matrix(db_industry_adf))
+
+## Cointegration ----
+
+db_industry_coint <- as.matrix(dplyr::select(db_industry_adf, -`Indústria geral`))
+
+coint.test(db_industry_adf$`Indústria geral`, db_industry_coint)
+
+coint <- function(vars) {
+  d <- as.matrix(vars) #convert data frame to Matrix
+  n <- length(colnames(vars)) #calculate the total number of variables
+  m <-
+    combn(n, 2) #calculate all possible combinations of pairs for all variables
+  col_m <- dim(m)[2] #number of all possible combinations
+  result <- matrix(NA, nrow = col_m, ncol = 3) #empty result matrix
+  colnames(result) <- c("Var_1", "Var_2", "p_Value")
+  
+  for (i in 1:col_m) {
+    Var_1 <- m[1, i]
+    Var_2 <- m[2, i]
+    res <- lm(d[, Var_1] ~ d[, Var_2] + 0)$residuals
+    p <-
+      tseries::adf.test(res, alternative = "stationary", k = 0)$p.value
+    result[i, 1] <- colnames(vars)[Var_1]
+    result[i, 2] <- colnames(vars)[Var_2]
+    result[i, 3] <- round(p, 4)
+  }
+  
+  return(result)
+}
+
+coint(db_industry_mod1[, -1])
+
 
 # 1) Industria Geral ----
 ## Data ----
@@ -44,6 +118,7 @@ db_industry_mod1 <- db_industry %>%
   rename(Y_industry = `Indústria geral`)
 
 db_industry_mod1 <- ts(db_industry_mod1[, -1], start = c(2002, 1), frequency = 12)
+
 
 ## Model ----
 VARselect(db_industry_mod1, 
@@ -93,7 +168,7 @@ g1 <- tibble(
               fill = "#1874CD") +
   geom_hline(aes(yintercept = 0), color = "black") +
   labs(title = 'Produção industrial geral',
-       x = '',
+       x = 'Meses após o choque',
        y = '') 
 
 # ________________________________________
@@ -170,7 +245,7 @@ g2 <- tibble(
               fill = "#1874CD") +
   geom_hline(aes(yintercept = 0), color = "black") +
   labs(title = 'Indústrias extrativas',
-       x = '',
+       x = 'Meses após o choque',
        y = '') 
 
 
@@ -248,7 +323,7 @@ g3 <- tibble(
               fill = "#1874CD") +
   geom_hline(aes(yintercept = 0), color = "black") +
   labs(title = 'Indústrias de transformação',
-       x = '',
+       x = 'Meses após o choque',
        y = '') 
 
 # ________________________________________
@@ -325,7 +400,7 @@ g4 <- tibble(
               fill = "#1874CD") +
   geom_hline(aes(yintercept = 0), color = "black") +
   labs(title = 'Bens de capital',
-       x = '',
+       x = 'Meses após o choque',
        y = '') 
 
 # ________________________________________
@@ -402,7 +477,7 @@ g5 <- tibble(
               fill = "#1874CD") +
   geom_hline(aes(yintercept = 0), color = "black") +
   labs(title = 'Bens intermediários',
-       x = '',
+       x = 'Meses após o choque',
        y = '')
 
 
@@ -480,7 +555,7 @@ g6 <- tibble(
               fill = "#1874CD") +
   geom_hline(aes(yintercept = 0), color = "black") +
   labs(title = 'Bens de consumo duráveis',
-       x = '',
+       x = 'Meses após o choque',
        y = '')
 
 
@@ -558,7 +633,7 @@ g7 <- tibble(
               fill = "#1874CD") +
   geom_hline(aes(yintercept = 0), color = "black") +
   labs(title = 'Bens de consumo não duráveis',
-       x = '',
+       x = 'Meses após o choque',
        y = '')
 
 

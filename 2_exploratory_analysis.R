@@ -20,7 +20,7 @@ theme_update(panel.grid.major.y = element_line(linetype = "dotted", color = "gra
              axis.text = element_text(size = 10, color = "black"),
              plot.title = element_text(family = 'LM', size = 16, color = 'black'),
              plot.caption = element_text(family = 'LM2', size = 13, color = 'black'),
-             plot.subtitle = element_text(family = 'LM2', size = 13, color = 'black'))
+             plot.subtitle = element_text(family = 'LM2', size = 14, color = 'black'))
 
 
 
@@ -125,6 +125,76 @@ grid <- grid.arrange(g1, g2, g3, layout_matrix = layout_matrix)
 ggsave("descritiva_2.png", grid, width = 15, height = 8.5, units = "in", dpi = 700, path = "C:/Users/Mohammed/Desktop/TCC I/version_1")
 
 
+# MoM sectoral activity ----
+
+## Industry 
+db_industry_plot <- db_industry %>% 
+  mutate(var_pct = (`Indústria geral` / lag(`Indústria geral`, 12)) - 1) %>% 
+  filter(!is.na(var_pct))
+
+p1 <- ggplot(db_industry_plot, aes(x = date, y = var_pct)) +
+  geom_col(fill = ifelse(db_industry_plot$var_pct < 0, "tomato4", "#006400")) +
+  scale_y_continuous(
+    breaks = seq(-0.25, 0.2, by = 0.05),
+    labels = function(x)
+      paste0(x * 100, "%")
+  ) +
+  labs(
+    x = "",
+    y = "",
+    title = "(6.1) Produto Industrial - Geral",
+    subtitle = "Variação anual por mês"
+  )
+
+## Retail 
+db_retail_plot <- db_retail %>%
+  mutate(var_pct = (
+    `Índice de volume de vendas no comércio varejista` / lag(`Índice de volume de vendas no comércio varejista`, 12)
+  ) - 1) %>%
+  filter(!is.na(var_pct))
+
+p2 <- ggplot(db_retail_plot, aes(x = date, y = var_pct)) +
+  geom_col(fill = ifelse(db_retail_plot$var_pct < 0, "tomato4", "#006400")) +
+  scale_y_continuous(
+    breaks = seq(-0.2, 0.1, by = 0.05),
+    labels = function(x)
+      paste0(x * 100, "%")
+  ) +
+  labs(
+    x = "",
+    y = "",
+    title = "(7.1) Produto do Comércio - Geral",
+    subtitle = "Variação anual por mês"
+  )
+
+## Services 
+db_services_plot <- db_services %>%
+  mutate(var_pct = (
+    `Índice de volume de serviços` / lag(`Índice de volume de serviços`, 12)
+  ) - 1) %>%
+  filter(!is.na(var_pct))
+
+p3 <- ggplot(db_services_plot, aes(x = date, y = var_pct)) +
+  geom_col(fill = ifelse(db_services_plot$var_pct < 0, "tomato4", "#006400")) +
+  scale_y_continuous(
+    breaks = seq(-0.2, 0.1, by = 0.05),
+    labels = function(x)
+      paste0(x * 100, "%")
+  ) +
+  labs(
+    x = "",
+    y = "",
+    title = "(8.1) Produto de Serviços - Geral",
+    subtitle = "Variação anual por mês"
+  )
+
+## Saving Joined with line plot
+layout_matrix <- matrix(c(1, 1, 2, 2, 3, 3,
+                          4, 4, 5, 5, 6, 6), nrow = 2, byrow = TRUE)
+
+grid <- grid.arrange(g1, g2, g3, p1, p2, p3, layout_matrix = layout_matrix)
+ggsave("descritiva_3.png", grid, width = 15, height = 8.5, units = "in", dpi = 700, path = "C:/Users/Mohammed/Desktop/TCC I/version_1")
+
 # Correlation plots ----
 ## Corr plot - Industry ----
 db_industry_ren <- db_industry %>% 
@@ -133,16 +203,16 @@ db_industry_ren <- db_industry %>%
          `Câmbio` = cambio,
          `Crédito` = credito_sa,
          `Agregado monetário` = money_supply)
-  
+
 corr <- round(cor(db_industry_ren[, -1]), 1)
 
 g1 <- ggcorrplot(corr, type = "lower",
-           lab = F,
-           lab_size = 3,
-           method="square", 
-           colors = c("tomato2", "white", "springgreen3"),
-           title="Correlações - Indústria",
-           ggtheme = theme_bw)+
+                 lab = F,
+                 lab_size = 3,
+                 method="square", 
+                 colors = c("tomato2", "white", "springgreen3"),
+                 title="Correlações - Indústria",
+                 ggtheme = theme_bw)+
   theme(plot.title = element_text(family = 'LM', size = 14, color = 'black'),
         axis.text = element_text(family = 'LM'),
         legend.text = element_text(family = 'LM', size = 10))
@@ -215,7 +285,7 @@ ggsave("correlations.png", grid, width = 15, height = 9, units = "in", dpi = 700
 #ggsave(g3, filename = 'correlations_services.png', width = 7, height = 6,  dpi = 700, path = "C:/Users/Mohammed/Desktop/TCC I/version_1")
 
 
-# Correlation analysis - unfinished ----
+# Correlation analysis - Not used ----
 
 
 plot_acf_diagnostics(.data = db_industry,
