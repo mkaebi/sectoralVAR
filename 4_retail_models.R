@@ -1,11 +1,17 @@
 rm(list = ls())
 
 library(tidyverse)
+library(lubridate)
 library(gridExtra)
 library(vars)
 library(tseries)
 library(VARtests)
 library(extrafont)
+library(urca)
+library(readxl)
+library(ipeadatar)
+library(fredr)
+fredr_set_key("123456") # insirir chave de acesso ao API
 
 # Theme ----
 loadfonts(device = "win")
@@ -23,50 +29,71 @@ theme_update(panel.grid.major.y = element_line(linetype = "dotted", color = "gra
 # loading Database ----
 load("C:/Users/Mohammed/Desktop/TCC I/R project/TCC/db_retail.RData")
 
+dummy_recession <- read_excel("Dados/rececoes_codace.xlsx")
+dummy_recession$date <- as.Date(dummy_recession$date)
+dummy_recession <- dummy_recession %>% 
+  filter(date >= as.Date(db_retail$date[1])) # keeps same start date
+
+fedfunds <- fredr(
+  series_id = "FEDFUNDS",
+  observation_start = as.Date(db_retail$date[1]),
+  observation_end = as.Date("2021-02-01")
+) %>%
+  dplyr::select(date, value) %>% 
+  dplyr::rename(fedfunds = value)
+
+commodities <- fredr(
+  series_id = "PALLFNFINDEXM",
+  observation_start = as.Date(db_retail$date[1]),
+  observation_end = as.Date("2021-02-01")
+) %>%
+  dplyr::select(date, value)%>% 
+  dplyr::rename(commodities = value)
+
+EMBI_db <- ipeadata("JPM366_EMBI366", quiet = FALSE) %>% 
+  dplyr::select(date, value)
+EMBI <- EMBI_db %>%
+  mutate(month = month(date), year = year(date)) %>%
+  group_by(month, year) %>%
+  summarise(EMBI = mean(value)) %>%
+  mutate(day = 1, date = as.Date(paste(year, month, day, sep = "-"))) %>%
+  ungroup() %>%
+  dplyr::select(date, EMBI) %>%
+  arrange(date) %>% 
+  dplyr::filter(date >= as.Date(db_retail$date[1]), date <= as.Date("2021-02-01"))
+
+dummies <- as.matrix(cbind(dummy_recession[, 2], fedfunds[, 2], log(commodities[, 2]), log(EMBI[, 2])))
+rm(dummy_recession, EMBI_db, EMBI, fedfunds, commodities)
+
 # ADF tests ----
 
 db_retail_adf <- db_retail %>%
   dplyr::mutate(
-    log_IPCA_A = log(IPCA_A),
+    #log_IPCA_A = log(IPCA_A),
     log_money_supply = log(money_supply),
     log_credito_sa = log(credito_sa),
     log_cambio = log(cambio)
   ) %>% # inflation, money supply, credit and FX rate in logs
   dplyr::select(-date, -IPCA_A, -cambio, -credito_sa, -money_supply) # table to use in ADF tests function
 
-adf_tests_matrix <- function(vars) {
-  
-  ##
-  # Function to perform ADF tests on all columns of a table
-  ##
-  
-  d <- as.matrix(vars) # convert data frame to Matrix
-  n <- length(colnames(vars)) #total number of variables
-  names <- colnames(vars) # names of variables
-  result <-
-    matrix(NA, nrow = n, ncol = 3) # empty matrix for results
-  colnames(result) <- c('Variable', 'ADF on level', 'ADF on Diff')
-  
-  for (i in 1:n) {
-    pvalue_level <- tseries::adf.test(d[, i])$p.value # pvalue of ADF test on level
-    pvalue_diff <- tseries::adf.test(diff(d[, i]))$p.value # pvalue of ADF test on first diff
-    
-    result[i, 1] <- names[i]
-    result[i, 2] <- round(as.numeric(pvalue_level), 3)
-    result[i, 3] <- round(as.numeric(pvalue_diff), 3)
-  }
-  
-  return(result)
-}
+summary(ur.df(db_retail_adf$IPCA_M, type = 'drift', selectlags = "AIC", lags = 12))
+summary(ur.df(db_retail_adf$selic, type = 'trend', selectlags = "AIC", lags = 12))
+summary(ur.df(db_retail_adf$log_money_supply, type = 'trend', selectlags = "AIC", lags = 12))
+summary(ur.df(db_retail_adf$log_credito_sa, type = 'trend', selectlags = "AIC", lags = 12))
+summary(ur.df(db_retail_adf$log_cambio, type = 'trend', selectlags = "AIC", lags = 12))
 
-adf_tests_matrix(db_retail_adf)
-stargazer(adf_tests_matrix(db_retail_adf))
+summary(ur.df(db_retail_adf$`Índice de volume de vendas no comércio varejista`, type = 'drift', selectlags = "AIC", lags = 12))
+summary(ur.df(db_retail_adf$`Móveis e eletrodomésticos`, type = 'drift', selectlags = "AIC", lags = 12))
+summary(ur.df(db_retail_adf$`Combustíveis e lubrificantes`, type = 'none', selectlags = "AIC", lags = 12))
+summary(ur.df(db_retail_adf$`Hipermercados, supermercados, produtos alimentícios, bebidas e fumo`, type = 'drift', selectlags = "AIC", lags = 12))
+summary(ur.df(db_retail_adf$`Tecidos, vestuário e calçados`, type = 'drift', selectlags = "AIC", lags = 12))
+summary(ur.df(db_retail_adf$`Veículos, motocicletas, partes e peças`, type = 'drift', selectlags = "AIC", lags = 12))
 
 # 1) Índice de volume de vendas no comércio varejista ----
 ## Data ----
 db_retail_mod1 <- db_retail %>%
   dplyr::mutate(
-    log_IPCA_A = log(IPCA_A),
+    #log_IPCA_A = log(IPCA_A),
     log_money_supply = log(money_supply),
     log_credito_sa = log(credito_sa),
     log_cambio = log(cambio)
@@ -74,7 +101,8 @@ db_retail_mod1 <- db_retail %>%
   dplyr::select(
     date,
     `Índice de volume de vendas no comércio varejista`,
-    log_IPCA_A,
+    #log_IPCA_A,
+    IPCA_M,
     selic,
     log_money_supply,
     log_credito_sa,
@@ -84,29 +112,57 @@ db_retail_mod1 <- db_retail %>%
 
 db_retail_mod1 <- ts(db_retail_mod1[, -1], start = c(2001, 12), frequency = 12)
 
-## Model ----
+## Lag selection ----
+
 VARselect(db_retail_mod1, 
-          lag.max = 12, 
-          type = 'both') # 2 lags selected based on all criterias
+          lag.max = 24, 
+          type = 'both', 
+          exogen = dummies, 
+          season = 12) # 2 lags selected based on all criterias
 
-model1 <- VAR(db_retail_mod1, 
-              p = 2, 
-              type = 'both') # estimates model with constant and trend
+## VAR Model ----
 
-## Redidual diagnostics ----
-roots(model1, modulus = TRUE) # AR must be < 1
+model1_var <- VAR(db_retail_mod1,
+                  p = 3,
+                  type = 'both',
+                  season = 12,
+                  exogen = dummies)
 
-ACtest(model1, h = 3, univariate = FALSE) # LM test for error autocorrelation (alternative is a VAR(3), H0: no AC)
-ACtest(model1, h = 4, univariate = FALSE) # LM test for error autocorrelation (alternative is a VAR(4), H0: no AC) 
-ACtest(model1, h = 5, univariate = FALSE) # LM test for error autocorrelation (alternative is a VAR(5), H0: no AC)
 
+#plot(model1_var)
+#summary(model1_var)
+roots(model1_var)
+serial.test(model1_var, lags.pt = 36)
+normality.test(model1_var, multivariate.only = TRUE) # Jarque-Bera normality test
+vars::arch.test(model1_var, lags.multi = 10, multivariate.only = TRUE) # heteroskedasticity test
+
+
+## Cointegration (Johansen Procedure) ----
+
+jotest <- ca.jo(
+  db_retail_mod1,
+  type = "eigen",
+  K = 3, # num of lags
+  ecdet = "trend", # 
+  spec = "longrun",
+  dumvar = dummies,
+  season = 12
+) # estimates VECM with 1 lag, trend and constant
+
+summary(jotest) # has cointegration
+
+## Model ----
+
+model1 <- vec2var(jotest, r = 3) # transforms previous VECM to VAR for IRF estimation
+
+## Residual diagnostics ----
+serial.test(model1, lags.pt = 36)
 normality.test(model1, multivariate.only = TRUE) # Jarque-Bera normality test
-
-arch.test(model1, multivariate.only = TRUE) # heteroskedasticity test
+vars::arch.test(model1, lags.multi = 10, multivariate.only = TRUE) # heteroskedasticity test
 
 ## Impulse response function ----
 n_ahead <- 36
-
+set.seed(1414)
 Y_IRF_mod1 <-
   irf(
     model1,
@@ -131,10 +187,10 @@ g1 <- tibble(
               alpha = 0.2,
               fill = "#208A12") +
   geom_hline(aes(yintercept = 0), color = "black") +
-  labs(title = 'Produto do comércio - Geral',
+  labs(title = 'Produto do Comércio - Geral',
        x = 'Meses após o choque',
        y = '')
-
+g1
 # ________________________________________----
 # ________________________________________
 # 2) Índice de volume de vendas no comércio varejista + Móveis e eletrodomésticos ----
@@ -150,7 +206,8 @@ db_retail_mod2 <- db_retail %>%
     date,
     `Índice de volume de vendas no comércio varejista`,
     `Móveis e eletrodomésticos`,
-    log_IPCA_A,
+    #log_IPCA_A,
+    IPCA_M,
     selic,
     log_money_supply,
     log_credito_sa,
@@ -161,25 +218,53 @@ db_retail_mod2 <- db_retail %>%
 
 db_retail_mod2 <- ts(db_retail_mod2[, -1], start = c(2001, 12), frequency = 12)
 
-## Model ----
+## Lag selection ----
+
 VARselect(db_retail_mod2, 
-          lag.max = 12, 
-          type = 'both') # 6 lags selected based on FPE and AIC
+          lag.max = 21, 
+          type = 'both', 
+          exogen = dummies, 
+          season = 12) # 2 lags selected based on all criterias
 
-model2 <- VAR(db_retail_mod2, 
-              p = 6, 
-              type = 'both') # estimates model with constant and trend
+## VAR Model ----
 
-## Redidual diagnostics ----
-roots(model2, modulus = TRUE) # AR must be < 1
+model2_var <- VAR(db_retail_mod2,
+                  p = 3,
+                  type = 'both',
+                  season = 12,
+                  exogen = dummies)
 
-ACtest(model2, h = 7, univariate = FALSE) # LM test for error autocorrelation (alternative is a VAR(7), H0: no AC)
-ACtest(model2, h = 8, univariate = FALSE) # LM test for error autocorrelation (alternative is a VAR(8), H0: no AC) 
-ACtest(model2, h = 9, univariate = FALSE) # LM test for error autocorrelation (alternative is a VAR(9), H0: no AC)
 
+#plot(model2_var)
+#summary(model2_var)
+roots(model2_var)
+serial.test(model2_var, lags.pt = 36)
+normality.test(model2_var, multivariate.only = TRUE) # Jarque-Bera normality test
+vars::arch.test(model2_var, lags.multi = 8, multivariate.only = TRUE) # heteroskedasticity test
+
+
+## Cointegration (Johansen Procedure) ----
+
+jotest2 <- ca.jo(
+  db_retail_mod2,
+  type = "eigen",
+  K = 3, # num of lags
+  ecdet = "trend", # 
+  spec = "longrun",
+  dumvar = dummies,
+  season = 12
+) # estimates VECM with 1 lag, trend and constant
+
+summary(jotest2) # has cointegration
+
+## Model ----
+
+model2 <- vec2var(jotest2, r = 4) # transforms previous VECM to VAR for IRF estimation
+
+## Residual diagnostics ----
+serial.test(model2, lags.pt = 34)
 normality.test(model2, multivariate.only = TRUE) # Jarque-Bera normality test
-
-arch.test(model2, multivariate.only = TRUE) # heteroskedasticity test
+vars::arch.test(model2, lags.multi = 8, multivariate.only = TRUE) # heteroskedasticity test
 
 ## Impulse response function ----
 n_ahead <- 36
@@ -208,10 +293,10 @@ g2 <- tibble(
               alpha = 0.2,
               fill = "#208A12") +
   geom_hline(aes(yintercept = 0), color = "black") +
-  labs(title = 'Móveis e eletrodomésticos',
+  labs(title = 'Móveis e Eletrodomésticos',
        x = 'Meses após o choque',
        y = '')
-
+g2
 # ________________________________________----
 # ________________________________________
 # 3) Índice de volume de vendas no comércio varejista + Combustíveis e lubrificantes ----
@@ -227,7 +312,8 @@ db_retail_mod3 <- db_retail %>%
     date,
     `Índice de volume de vendas no comércio varejista`,
     `Combustíveis e lubrificantes`,
-    log_IPCA_A,
+    #log_IPCA_A,
+    IPCA_M,
     selic,
     log_money_supply,
     log_credito_sa,
@@ -238,25 +324,53 @@ db_retail_mod3 <- db_retail %>%
 
 db_retail_mod3 <- ts(db_retail_mod3[, -1], start = c(2001, 12), frequency = 12)
 
-## Model ----
+## Lag selection ----
+
 VARselect(db_retail_mod3, 
-          lag.max = 12, 
-          type = 'both') # 2 lags selected based on all
+          lag.max = 21, 
+          type = 'both', 
+          exogen = dummies, 
+          season = 12) # 2 lags selected based on all criterias
 
-model3 <- VAR(db_retail_mod3, 
-              p = 2, 
-              type = 'both') # estimates model with constant and trend
+## VAR Model ----
 
-## Redidual diagnostics ----
-roots(model3, modulus = TRUE) # AR must be < 1
+model3_var <- VAR(db_retail_mod3,
+                  p = 3,
+                  type = 'both',
+                  season = 12,
+                  exogen = dummies)
 
-ACtest(model3, h = 3, univariate = FALSE) # LM test for error autocorrelation (alternative is a VAR(3), H0: no AC)
-ACtest(model3, h = 4, univariate = FALSE) # LM test for error autocorrelation (alternative is a VAR(4), H0: no AC) 
-ACtest(model3, h = 5, univariate = FALSE) # LM test for error autocorrelation (alternative is a VAR(5), H0: no AC)
 
+#plot(model3_var)
+#summary(model3_var)
+roots(model3_var)
+serial.test(model3_var, lags.pt = 36)
+normality.test(model3_var, multivariate.only = TRUE) # Jarque-Bera normality test
+vars::arch.test(model3_var, lags.multi = 8, multivariate.only = TRUE) # heteroskedasticity test
+
+
+## Cointegration (Johansen Procedure) ----
+
+jotest3 <- ca.jo(
+  db_retail_mod3,
+  type = "eigen",
+  K = 3, # num of lags
+  ecdet = "trend", # 
+  spec = "longrun",
+  dumvar = dummies,
+  season = 12
+) # estimates VECM with 1 lag, trend and constant
+
+summary(jotest3) # has cointegration
+
+## Model ----
+
+model3 <- vec2var(jotest3, r = 4) # transforms previous VECM to VAR for IRF estimation
+
+## Residual diagnostics ----
+serial.test(model3, lags.pt = 36)
 normality.test(model3, multivariate.only = TRUE) # Jarque-Bera normality test
-
-arch.test(model3, multivariate.only = TRUE) # heteroskedasticity test
+vars::arch.test(model3, lags.multi = 7, multivariate.only = TRUE) # heteroskedasticity test
 
 ## Impulse response function ----
 n_ahead <- 36
@@ -285,9 +399,10 @@ g3 <- tibble(
               alpha = 0.2,
               fill = "#208A12") +
   geom_hline(aes(yintercept = 0), color = "black") +
-  labs(title = 'Combustíveis e lubrificantes',
+  labs(title = 'Combustíveis e Lubrificantes',
        x = 'Meses após o choque',
        y = '')
+g3
 
 # ________________________________________----
 # ________________________________________
@@ -304,7 +419,8 @@ db_retail_mod4 <- db_retail %>%
     date,
     `Índice de volume de vendas no comércio varejista`,
     `Hipermercados, supermercados, produtos alimentícios, bebidas e fumo`,
-    log_IPCA_A,
+    #log_IPCA_A,
+    IPCA_M,
     selic,
     log_money_supply,
     log_credito_sa,
@@ -315,25 +431,53 @@ db_retail_mod4 <- db_retail %>%
 
 db_retail_mod4 <- ts(db_retail_mod4[, -1], start = c(2001, 12), frequency = 12)
 
-## Model ----
+## Lag selection ----
+
 VARselect(db_retail_mod4, 
-          lag.max = 12, 
-          type = 'both') # 3 lags selected based on FPE and AIC
+          lag.max = 21, 
+          type = 'both', 
+          exogen = dummies, 
+          season = 12) # 2 lags selected based on all criterias
 
-model4 <- VAR(db_retail_mod4, 
-              p = 3, 
-              type = 'both') # estimates model with constant and trend
+## VAR Model ----
 
-## Redidual diagnostics ----
-roots(model4, modulus = TRUE) # AR must be < 1
+model4_var <- VAR(db_retail_mod4,
+                  p = 3,
+                  type = 'both',
+                  season = 12,
+                  exogen = dummies)
 
-ACtest(model4, h = 4, univariate = FALSE) # LM test for error autocorrelation (alternative is a VAR(4), H0: no AC)
-ACtest(model4, h = 5, univariate = FALSE) # LM test for error autocorrelation (alternative is a VAR(5), H0: no AC) 
-ACtest(model4, h = 6, univariate = FALSE) # LM test for error autocorrelation (alternative is a VAR(6), H0: no AC)
 
+#plot(model4_var)
+#summary(model4_var)
+roots(model4_var)
+serial.test(model4_var, lags.pt = 36)
+normality.test(model4_var, multivariate.only = TRUE) # Jarque-Bera normality test
+vars::arch.test(model4_var, lags.multi = 8, multivariate.only = TRUE) # heteroskedasticity test
+
+
+## Cointegration (Johansen Procedure) ----
+
+jotest4 <- ca.jo(
+  db_retail_mod4,
+  type = "eigen",
+  K = 3, # num of lags
+  ecdet = "trend", # 
+  spec = "longrun",
+  dumvar = dummies,
+  season = 12
+) # estimates VECM with 1 lag, trend and constant
+
+summary(jotest4) # has cointegration
+
+## Model ----
+
+model4 <- vec2var(jotest4, r = 4) # transforms previous VECM to VAR for IRF estimation
+
+## Residual diagnostics ----
+serial.test(model4, lags.pt = 30)
 normality.test(model4, multivariate.only = TRUE) # Jarque-Bera normality test
-
-arch.test(model4, multivariate.only = TRUE) # heteroskedasticity test
+vars::arch.test(model4, lags.multi = 9, multivariate.only = TRUE) # heteroskedasticity test
 
 ## Impulse response function ----
 n_ahead <- 36
@@ -362,10 +506,10 @@ g4 <- tibble(
               alpha = 0.2,
               fill = "#208A12") +
   geom_hline(aes(yintercept = 0), color = "black") +
-  labs(title = 'Supermercados e alimentos',
+  labs(title = 'Supermercados e Alimentos',
        x = 'Meses após o choque',
        y = '')
-
+g4
 # ________________________________________----
 # ________________________________________
 # 5) Índice de volume de vendas no comércio varejista + Tecidos, vestuário e calçados ----
@@ -381,7 +525,8 @@ db_retail_mod5 <- db_retail %>%
     date,
     `Índice de volume de vendas no comércio varejista`,
     `Tecidos, vestuário e calçados`,
-    log_IPCA_A,
+    #log_IPCA_A,
+    IPCA_M,
     selic,
     log_money_supply,
     log_credito_sa,
@@ -392,25 +537,53 @@ db_retail_mod5 <- db_retail %>%
 
 db_retail_mod5 <- ts(db_retail_mod5[, -1], start = c(2001, 12), frequency = 12)
 
-## Model ----
+## Lag selection ----
+
 VARselect(db_retail_mod5, 
-          lag.max = 12, 
-          type = 'both') # 3 lags selected based on FPE and AIC
+          lag.max = 21, 
+          type = 'both', 
+          exogen = dummies, 
+          season = 12) # 2 lags selected based on all criterias
 
-model5 <- VAR(db_retail_mod5, 
-              p = 3, 
-              type = 'both') # estimates model with constant and trend
+## VAR Model ----
 
-## Redidual diagnostics ----
-roots(model5, modulus = TRUE) # AR must be < 1
+model5_var <- VAR(db_retail_mod5,
+                  p = 3,
+                  type = 'both',
+                  season = 12,
+                  exogen = dummies)
 
-ACtest(model5, h = 4, univariate = FALSE) # LM test for error autocorrelation (alternative is a VAR(4), H0: no AC)
-ACtest(model5, h = 5, univariate = FALSE) # LM test for error autocorrelation (alternative is a VAR(5), H0: no AC) 
-ACtest(model5, h = 6, univariate = FALSE) # LM test for error autocorrelation (alternative is a VAR(6), H0: no AC)
 
+#plot(model5_var)
+#summary(model5_var)
+roots(model5_var)
+serial.test(model5_var, lags.pt = 30)
+normality.test(model5_var, multivariate.only = TRUE) # Jarque-Bera normality test
+vars::arch.test(model5_var, lags.multi = 8, multivariate.only = TRUE) # heteroskedasticity test
+
+
+## Cointegration (Johansen Procedure) ----
+
+jotest5 <- ca.jo(
+  db_retail_mod5,
+  type = "eigen",
+  K = 3, # num of lags
+  ecdet = "trend", # 
+  spec = "longrun",
+  dumvar = dummies,
+  season = 12
+) # estimates VECM with 1 lag, trend and constant
+
+summary(jotest5) # has cointegration
+
+## Model ----
+
+model5 <- vec2var(jotest5, r = 4) # transforms previous VECM to VAR for IRF estimation
+
+## Residual diagnostics ----
+serial.test(model5, lags.pt = 30)
 normality.test(model5, multivariate.only = TRUE) # Jarque-Bera normality test
-
-arch.test(model5, multivariate.only = TRUE) # heteroskedasticity test
+vars::arch.test(model5, lags.multi = 8, multivariate.only = TRUE) # heteroskedasticity test
 
 ## Impulse response function ----
 n_ahead <- 36
@@ -439,10 +612,10 @@ g5 <- tibble(
               alpha = 0.2,
               fill = "#208A12") +
   geom_hline(aes(yintercept = 0), color = "black") +
-  labs(title = 'Tecidos, vestuário e calçados',
+  labs(title = 'Tecidos, Vestuário e Calçados',
        x = 'Meses após o choque',
        y = '')
-
+g5
 # ________________________________________----
 # ________________________________________
 # 6) Índice de volume de vendas no comércio varejista + Veículos, motocicletas, partes e peças ----
@@ -458,7 +631,8 @@ db_retail_mod6 <- db_retail %>%
     date,
     `Índice de volume de vendas no comércio varejista`,
     `Veículos, motocicletas, partes e peças`,
-    log_IPCA_A,
+    #log_IPCA_A,
+    IPCA_M,
     selic,
     log_money_supply,
     log_credito_sa,
@@ -469,25 +643,53 @@ db_retail_mod6 <- db_retail %>%
 
 db_retail_mod6 <- ts(db_retail_mod6[, -1], start = c(2001, 12), frequency = 12)
 
-## Model ----
+## Lag selection ----
+
 VARselect(db_retail_mod6, 
-          lag.max = 12, 
-          type = 'both') # 2 lags selected based on all
+          lag.max = 21, 
+          type = 'both', 
+          exogen = dummies, 
+          season = 12) # 2 lags selected based on all criterias
 
-model6 <- VAR(db_retail_mod6, 
-              p = 2, 
-              type = 'both') # estimates model with constant and trend
+## VAR Model ----
 
-## Redidual diagnostics ----
-roots(model6, modulus = TRUE) # AR must be < 1
+model6_var <- VAR(db_retail_mod6,
+                  p = 2,
+                  type = 'both',
+                  season = 12,
+                  exogen = dummies)
 
-ACtest(model6, h = 3, univariate = FALSE) # LM test for error autocorrelation (alternative is a VAR(3), H0: no AC)
-ACtest(model6, h = 4, univariate = FALSE) # LM test for error autocorrelation (alternative is a VAR(4), H0: no AC) 
-ACtest(model6, h = 5, univariate = FALSE) # LM test for error autocorrelation (alternative is a VAR(5), H0: no AC)
 
+#plot(model6_var)
+#summary(model6_var)
+roots(model6_var)
+serial.test(model6_var, lags.pt = 30)
+normality.test(model6_var, multivariate.only = TRUE) # Jarque-Bera normality test
+vars::arch.test(model6_var, lags.multi = 8, multivariate.only = TRUE) # heteroskedasticity test
+
+
+## Cointegration (Johansen Procedure) ----
+
+jotest6 <- ca.jo(
+  db_retail_mod6,
+  type = "eigen",
+  K = 2, # num of lags
+  ecdet = "trend", # 
+  spec = "longrun",
+  dumvar = dummies,
+  season = 12
+) # estimates VECM with 1 lag, trend and constant
+
+summary(jotest6) # has cointegration
+
+## Model ----
+
+model6 <- vec2var(jotest6, r = 3) # transforms previous VECM to VAR for IRF estimation
+
+## Residual diagnostics ----
+serial.test(model6, lags.pt = 30)
 normality.test(model6, multivariate.only = TRUE) # Jarque-Bera normality test
-
-arch.test(model6, multivariate.only = TRUE) # heteroskedasticity test
+vars::arch.test(model6, lags.multi = 8, multivariate.only = TRUE) # heteroskedasticity test
 
 ## Impulse response function ----
 n_ahead <- 36
@@ -516,10 +718,10 @@ g6 <- tibble(
               alpha = 0.2,
               fill = "#208A12") +
   geom_hline(aes(yintercept = 0), color = "black") +
-  labs(title = 'Veículos, motocicletas e peças',
+  labs(title = 'Veículos, Motocicletas e Peças',
        x = 'Meses após o choque',
        y = '')
-
+g6
 # ________________________________________----
 # ________________________________________
 # Saving plots ----
@@ -528,4 +730,4 @@ layout_matrix <- matrix(c(1, 1, 2, 2,
                           5, 5, 6, 6), nrow = 3, byrow = TRUE)
 
 grid <- grid.arrange(g1, g2, g3, g4, g5, g6, layout_matrix = layout_matrix)
-ggsave("IRF_varejo.png", grid, width = 7.7, height = 9.9, units = "in", dpi = 700, path = "C:/Users/Mohammed/Desktop/TCC I/version_1")
+ggsave("IRF_varejo.png", grid, width = 7.7, height = 9.9, units = "in", dpi = 700)
