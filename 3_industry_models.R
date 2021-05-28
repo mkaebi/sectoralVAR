@@ -440,7 +440,8 @@ db_industry_mod4 <- db_industry %>%
     date,
     `Indústria geral`,
     `Bens de capital`,
-    log_IPCA_A,
+    #log_IPCA_A,
+    IPCA_M,
     selic,
     log_money_supply,
     log_credito_sa,
@@ -491,7 +492,7 @@ summary(jotest4) # has cointegration
 
 ## Model ----
 
-model4 <- vec2var(jotest4, r = 4) # transforms previous VECM to VAR for IRF estimation
+model4 <- vec2var(jotest4, r = 3) # transforms previous VECM to VAR for IRF estimation
 model4
 
 ## Redidual diagnostics ----
@@ -549,7 +550,8 @@ db_industry_mod5 <- db_industry %>%
     date,
     `Indústria geral`,
     `Bens intermediários`,
-    log_IPCA_A,
+    #log_IPCA_A,
+    IPCA_M,
     selic,
     log_money_supply,
     log_credito_sa,
@@ -571,7 +573,7 @@ VARselect(db_industry_mod5,
 ## VAR Model ----
 
 model5_var <- VAR(db_industry_mod5,
-                  p = 3,
+                  p = 2,
                   type = 'both',
                   season = 12,
                   exogen = dummies)
@@ -589,7 +591,7 @@ vars::arch.test(model5_var, lags.multi = 8, multivariate.only = TRUE) # heterosk
 jotest5 <- ca.jo(
   db_industry_mod5,
   type = "eigen",
-  K = 3, # num of lags
+  K = 2, # num of lags
   ecdet = "trend", # 
   spec = "longrun",
   dumvar = dummies
@@ -656,7 +658,8 @@ db_industry_mod6 <- db_industry %>%
     date,
     `Indústria geral`,
     `Bens de consumo duráveis`,
-    log_IPCA_A,
+    #log_IPCA_A,
+    IPCA_M,
     selic,
     log_money_supply,
     log_credito_sa,
@@ -678,7 +681,7 @@ VARselect(db_industry_mod6,
 ## VAR Model ----
 
 model6_var <- VAR(db_industry_mod6,
-                  p = 4,
+                  p = 2,
                   type = 'both',
                   season = 12,
                   exogen = dummies)
@@ -696,7 +699,7 @@ vars::arch.test(model6_var, lags.multi = 8, multivariate.only = TRUE) # heterosk
 jotest6 <- ca.jo(
   db_industry_mod6,
   type = "eigen",
-  K = 4, # num of lags
+  K = 2, # num of lags
   ecdet = "trend", # 
   spec = "longrun",
   dumvar = dummies
@@ -706,7 +709,7 @@ summary(jotest6) # has cointegration
 
 ## Model ----
 
-model6 <- vec2var(jotest6, r = 3) # transforms previous VECM to VAR for IRF estimation
+model6 <- vec2var(jotest6, r = 4) # transforms previous VECM to VAR for IRF estimation
 model6
 
 ## Redidual diagnostics ----
@@ -763,7 +766,8 @@ db_industry_mod7 <- db_industry %>%
     date,
     `Indústria geral`,
     `Bens de consumo não duráveis`,
-    log_IPCA_A,
+    #log_IPCA_A,
+    IPCA_M,
     selic,
     log_money_supply,
     log_credito_sa,
@@ -785,7 +789,7 @@ VARselect(db_industry_mod7,
 ## VAR Model ----
 
 model7_var <- VAR(db_industry_mod7,
-                  p = 3,
+                  p = 2,
                   type = 'both',
                   season = 12,
                   exogen = dummies)
@@ -803,7 +807,7 @@ vars::arch.test(model7_var, lags.multi = 8, multivariate.only = TRUE) # heterosk
 jotest7 <- ca.jo(
   db_industry_mod7,
   type = "eigen",
-  K = 3, # num of lags
+  K = 2, # num of lags
   ecdet = "trend", # 
   spec = "longrun",
   dumvar = dummies
@@ -813,7 +817,7 @@ summary(jotest7) # has cointegration
 
 ## Model ----
 
-model7 <- vec2var(jotest7, r = 3) # transforms previous VECM to VAR for IRF estimation
+model7 <- vec2var(jotest7, r = 4) # transforms previous VECM to VAR for IRF estimation
 model7
 
 ## Redidual diagnostics ----
@@ -864,4 +868,4 @@ layout_matrix <- matrix(c(1, 1, 1, 1,
                           6, 6, 7, 7), nrow = 4, byrow = TRUE)
 
 grid <- grid.arrange(g1, g2, g3, g4, g5, g6, g7, layout_matrix = layout_matrix)
-ggsave("IRF_industria.png", grid, width = 7.7, height = 9.9, units = "in", dpi = 700)
+ggsave("IRF_industria.png", grid, width = 7.7, height = 9.9, units = "in", dpi = 700, path = "C:/Users/Mohammed/Desktop/TCC I/version_1")
