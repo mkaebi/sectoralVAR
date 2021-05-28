@@ -868,4 +868,4 @@ layout_matrix <- matrix(c(1, 1, 1, 1,
                           6, 6, 7, 7), nrow = 4, byrow = TRUE)
 
 grid <- grid.arrange(g1, g2, g3, g4, g5, g6, g7, layout_matrix = layout_matrix)
-ggsave("IRF_industria.png", grid, width = 7.7, height = 9.9, units = "in", dpi = 700, path = "C:/Users/Mohammed/Desktop/TCC I/version_1")
+ggsave("IRF_industria.png", grid, width = 7.7, height = 9.9, units = "in", dpi = 700)
